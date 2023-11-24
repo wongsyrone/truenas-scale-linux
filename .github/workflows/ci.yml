@@ -87,6 +87,27 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Reclaim disk space
+        # commands taken from https://github.com/openzfs/zfs/commit/e2909fae8f2c3b15459fd4c0acc1999c6907864b
+        run: |
+          sudo docker system prune --force --all --volumes
+          sudo rm -rf \
+              /usr/share/az* \
+              /usr/share/dotnet \
+              /usr/share/gradle* \
+              /usr/share/miniconda \
+              /usr/share/swift \
+              /var/lib/gems \
+              /var/lib/mysql \
+              /var/lib/snapd
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          swap-size-mb: 10240
+          remove-dotnet: "true"
+          remove-android: "true"
+          remove-haskell: "true"
 
       - name: Check out repository code
         uses: actions/checkout@v4
@@ -104,6 +125,11 @@ jobs:
 
       - name: Generate .config
         run: |
+          echo 'CONFIG_NTFS3_FS=y' >> scripts/package/truenas/truenas.config
+          echo '# CONFIG_NTFS3_64BIT_CLUSTER is not set' >> scripts/package/truenas/truenas.config
+          echo 'CONFIG_NTFS3_LZX_XPRESS=y' >> scripts/package/truenas/truenas.config
+          echo '# CONFIG_NTFS3_FS_POSIX_ACL is not set' >> scripts/package/truenas/truenas.config
+          cat scripts/package/truenas/truenas.config
           rm -rf .git .gitattributes .gitignore
           sed  -i 's/^EXTRAVERSION.*/EXTRAVERSION = -production/'  Makefile
           make ARCH=x86_64 defconfig
