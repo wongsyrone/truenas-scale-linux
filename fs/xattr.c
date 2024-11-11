@@ -677,17 +677,6 @@ static int path_setxattr(const char __user *pathname,
 			 const char __user *name, const void __user *value,
 			 size_t size, int flags, unsigned int lookup_flags)
 {
-#ifdef CONFIG_TRUENAS
-	if (size) {
-		if (size > XATTR_SIZE_MAX) {
-			if ((size > XATTR_LARGE_SIZE_MAX) ||
-			    (IS_LARGE_XATTR(d->d_inode) == 0)) {
-				return -E2BIG;
-			}
-		}
-	}
-#endif
-
 	struct xattr_name kname;
 	struct xattr_ctx ctx = {
 		.cvalue   = value,
@@ -707,6 +696,18 @@ retry:
 	error = user_path_at(AT_FDCWD, pathname, lookup_flags, &path);
 	if (error)
 		goto out;
+
+#ifdef CONFIG_TRUENAS
+	if (size) {
+		if (size > XATTR_SIZE_MAX) {
+			if ((size > XATTR_LARGE_SIZE_MAX) ||
+			    (IS_LARGE_XATTR(path.dentry->d_inode) == 0)) {
+				return -E2BIG;
+			}
+		}
+	}
+#endif
+
 	error = mnt_want_write(path.mnt);
 	if (!error) {
 		error = do_setxattr(mnt_idmap(path.mnt), path.dentry, &ctx);
@@ -753,6 +754,17 @@ SYSCALL_DEFINE5(fsetxattr, int, fd, const char __user *, name,
 	CLASS(fd, f)(fd);
 	if (!f.file)
 		return -EBADF;
+
+#ifdef CONFIG_TRUENAS
+	if (size) {
+		if (size > XATTR_SIZE_MAX) {
+			if ((size > XATTR_LARGE_SIZE_MAX) ||
+			    (IS_LARGE_XATTR(f.file->f_path.dentry->d_inode) == 0)) {
+				return -E2BIG;
+			}
+		}
+	}
+#endif
 
 	audit_file(f.file);
 	error = setxattr_copy(name, &ctx);
