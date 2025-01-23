@@ -5315,14 +5315,9 @@ free_req:
  * @ucmd: user space command
  * @is_admin: admin or IO command
  */
-static int mpi3_nvme_user_cmd(struct scsi_device *sdev, struct nvme_passthru_cmd __user *ucmd,
-    int is_admin)
+static int mpi3_nvme_user_cmd(struct mpi3mr_ioc *mrioc, struct nvme_passthru_cmd __user *ucmd,
+    int is_admin, u16 dev_handle)
 {
-	struct Scsi_Host *shost = sdev->host;
-	struct mpi3mr_ioc *mrioc = shost_priv(shost);
-	struct mpi3mr_sdev_priv_data *sdev_priv_data = sdev->hostdata;
-	struct mpi3mr_stgt_priv_data *sas_target_priv_data = sdev_priv_data->tgt_priv_data;
-	struct mpi3mr_tgt_dev *tgt_dev;
 	struct nvme_passthru_cmd cmd;
 	struct nvme_command encap_cmd;
 	u64	result = 0;
@@ -5339,13 +5334,6 @@ static int mpi3_nvme_user_cmd(struct scsi_device *sdev, struct nvme_passthru_cmd
 	if (cmd.metadata_len > 0)
 		return (-EOPNOTSUPP);
 
-	tgt_dev = mpi3mr_get_tgtdev_by_handle(mrioc, sas_target_priv_data->dev_handle);
-	if ((tgt_dev->dev_spec.pcie_inf.dev_info &
-	    MPI3_DEVICE0_PCIE_DEVICE_INFO_TYPE_MASK) !=
-	    MPI3_DEVICE0_PCIE_DEVICE_INFO_TYPE_NVME_DEVICE) {
-		return (-ENXIO);
-	}
-
 	memset(&encap_cmd, 0, sizeof(encap_cmd));
 	encap_cmd.common.opcode = cmd.opcode;
 	encap_cmd.common.flags = cmd.flags;
@@ -5359,7 +5347,7 @@ static int mpi3_nvme_user_cmd(struct scsi_device *sdev, struct nvme_passthru_cmd
 	encap_cmd.common.cdw14 = cpu_to_le32(cmd.cdw14);
 	encap_cmd.common.cdw15 = cpu_to_le32(cmd.cdw15);
 	ret = mpi3_nvme_submit_command(mrioc, encap_cmd, cmd.addr, cmd.data_len,
-	    &result, is_admin, tgt_dev->dev_handle);
+	    &result, is_admin, dev_handle);
 	if (ret >= 0) {
 		if (put_user(result, &ucmd->result))
 			return (-EFAULT);
@@ -5374,14 +5362,9 @@ static int mpi3_nvme_user_cmd(struct scsi_device *sdev, struct nvme_passthru_cmd
  * @ucmd: user space command
  * @is_admin: admin or IO command
  */
-static int mpi3_nvme_user_cmd64(struct scsi_device *sdev, struct nvme_passthru_cmd64 __user *ucmd,
-    int is_admin)
+static int mpi3_nvme_user_cmd64(struct mpi3mr_ioc *mrioc, struct nvme_passthru_cmd64 __user *ucmd,
+    int is_admin, u16 dev_handle)
 {
-	struct Scsi_Host *shost = sdev->host;
-	struct mpi3mr_ioc *mrioc = shost_priv(shost);
-	struct mpi3mr_sdev_priv_data *sdev_priv_data = sdev->hostdata;
-	struct mpi3mr_stgt_priv_data *sas_target_priv_data = sdev_priv_data->tgt_priv_data;
-	struct mpi3mr_tgt_dev *tgt_dev;
 	struct nvme_passthru_cmd cmd;
 	struct nvme_command encap_cmd;
 	u64	result = 0;
@@ -5398,13 +5381,6 @@ static int mpi3_nvme_user_cmd64(struct scsi_device *sdev, struct nvme_passthru_c
 	if (cmd.metadata_len > 0)
 		return (-EOPNOTSUPP);
 
-	tgt_dev = mpi3mr_get_tgtdev_by_handle(mrioc, sas_target_priv_data->dev_handle);
-	if ((tgt_dev->dev_spec.pcie_inf.dev_info &
-	    MPI3_DEVICE0_PCIE_DEVICE_INFO_TYPE_MASK) !=
-	    MPI3_DEVICE0_PCIE_DEVICE_INFO_TYPE_NVME_DEVICE) {
-		return (-ENXIO);
-	}
-
 	memset(&encap_cmd, 0, sizeof(encap_cmd));
 	encap_cmd.common.opcode = cmd.opcode;
 	encap_cmd.common.flags = cmd.flags;
@@ -5418,7 +5394,7 @@ static int mpi3_nvme_user_cmd64(struct scsi_device *sdev, struct nvme_passthru_c
 	encap_cmd.common.cdw14 = cpu_to_le32(cmd.cdw14);
 	encap_cmd.common.cdw15 = cpu_to_le32(cmd.cdw15);
 	ret = mpi3_nvme_submit_command(mrioc, encap_cmd, cmd.addr, cmd.data_len,
-	    &result, is_admin, tgt_dev->dev_handle);
+	    &result, is_admin, dev_handle);
 	if (ret >= 0) {
 		if (put_user(result, &ucmd->result))
 			return (-EFAULT);
@@ -5442,6 +5418,19 @@ static int mpi3_nvme_user_cmd64(struct scsi_device *sdev, struct nvme_passthru_c
  */
 static int mpi3mr_scsih_ioctl(struct scsi_device *sdev, unsigned int cmd, void __user *arg)
 {
+	struct Scsi_Host *shost = sdev->host;
+	struct mpi3mr_ioc *mrioc = shost_priv(shost);
+	struct mpi3mr_sdev_priv_data *sdev_priv_data = sdev->hostdata;
+	struct mpi3mr_stgt_priv_data *sas_target_priv_data = sdev_priv_data->tgt_priv_data;
+	struct mpi3mr_tgt_dev *tgt_dev = mpi3mr_get_tgtdev_by_handle(mrioc,
+					sas_target_priv_data->dev_handle);
+
+	if ((tgt_dev->dev_spec.pcie_inf.dev_info &
+	    MPI3_DEVICE0_PCIE_DEVICE_INFO_TYPE_MASK) !=
+	    MPI3_DEVICE0_PCIE_DEVICE_INFO_TYPE_NVME_DEVICE) {
+		return (-EINVAL);
+	}
+
 	switch (cmd) {
 	case NVME_IOCTL_ID:
 		/*
@@ -5449,13 +5438,13 @@ static int mpi3mr_scsih_ioctl(struct scsi_device *sdev, unsigned int cmd, void _
 		 */
 		return (1);
 	case NVME_IOCTL_ADMIN_CMD:
-		return (mpi3_nvme_user_cmd(sdev, arg, 1));
+		return (mpi3_nvme_user_cmd(mrioc, arg, 1, tgt_dev->dev_handle));
 	case NVME_IOCTL_ADMIN64_CMD:
-		return (mpi3_nvme_user_cmd64(sdev, arg, 1));
+		return (mpi3_nvme_user_cmd64(mrioc, arg, 1, tgt_dev->dev_handle));
 	case NVME_IOCTL_IO_CMD:
-		return (mpi3_nvme_user_cmd(sdev, arg, 0));
+		return (mpi3_nvme_user_cmd(mrioc, arg, 0, tgt_dev->dev_handle));
 	case NVME_IOCTL_IO64_CMD:
-		return (mpi3_nvme_user_cmd64(sdev, arg, 0));
+		return (mpi3_nvme_user_cmd64(mrioc, arg, 0, tgt_dev->dev_handle));
 
 	/*
 	 * NVME_IOCTL_SUBMIT_IO requires the `lba_shift` parameter
